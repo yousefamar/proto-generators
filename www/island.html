@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Universe Generator</title>
+	<style>
+		canvas {
+			background-color: black;
+		}
+	</style>
+	<script src="noise.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="512" height="512"></canvas>
+	<script>
+		let width  = 512;
+		let height = 512;
+
+		let canvas = document.getElementById('canvas');
+		let ctx = canvas.getContext('2d');
+
+		let setPixel = (x, y, color='#FFFFFF') => {
+			ctx.fillStyle = color;
+			ctx.fillRect(x, y, 1, 1);
+		};
+
+		let radius = 0.5 * Math.min(width, height);
+		for (let y = 0; y < height; ++y) {
+			for (let x = 0; x < width; ++x) {
+				let circle = noise.circle(x - (width >> 1), y - (height >> 1), radius);
+				let perlin = (noise.perlin2D(0, x, y) + 1) * 0.5;
+				let out    = circle * perlin;
+				let color  = 'hsl(0, 0%, ' + Math.floor(out * 100) + '%)';
+				setPixel(x, y, color);
+			}
+		}
+
+	</script>
+</body>
+</html>

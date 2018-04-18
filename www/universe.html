@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Universe Generator</title>
+	<style>
+		canvas {
+			background-color: black;
+		}
+	</style>
+	<script src="noise.js"></script>
+</head>
+<body>
+	<canvas id="canvas" width="1024" height="1024"></canvas>
+	<script>
+		var canvas = document.getElementById('canvas');
+		var ctx = canvas.getContext('2d');
+
+		let setPixel = (x, y, color='#FFFFFF') => {
+			ctx.fillStyle = color;
+			ctx.fillRect(x, y, 1, 1);
+		};
+	</script>
+</body>
+</html>

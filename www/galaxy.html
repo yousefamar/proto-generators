@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<title>Universe Generator</title>
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+		}
+		canvas {
+			background-color: black;
+		}
+	</style>
+	<script src="three.min.js"></script>
+	<script src="OrbitControls.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.5/dat.gui.min.js" integrity="sha256-S4/QjoXe4IOpU0f0Sj5jEQLTWPoX9uRl1ohB91jyhuw=" crossorigin="anonymous"></script>
+	<script src="noise.js"></script>
+</head>
+<body>
+	<div id="container"></div>
+	<script>
+
+let points = null;
+
+let generate = () => {
+	let width  = config.size;
+	let height = config.size;
+	let radius = 0.5 * Math.min(width, height);
+	let depth  = config.coreDepth * 2 * radius;
+	let seed   = 0;
+
+	let rotate = (x, y, theta) => {
+		let _x = x * Math.cos(theta) - y * Math.sin(theta);
+		let _y = y * Math.cos(theta) + x * Math.sin(theta);
+		return [ _x, _y ];
+	}
+
+	// spiral
+	// [x, y] = rotate(x, y, swirliness * circle * 2 * Math.PI);
+	// out = noise.ellipse(x, y, radius, 0.2 * radius);
+
+	let screen = (a, b) => 1 - (1 - a) * (1 - b);
+
+	let galacticMask = (x, y, arms = 5, swirliness = 0.5, coreWidth = 0.4, coreHeight = 0.3) => {
+		x -= width  >> 1;
+		y -= height >> 1;
+		let circle = noise.circle(x, y, radius);
+		let core   = noise.ellipse(x, y, coreWidth * radius, coreHeight * radius);
+		[x, y] = rotate(x, y, swirliness * circle * 2 * Math.PI);
+		let out = (noise.spokes(x, y, arms, radius) + 1) * 0.5;
+		out *= circle;
+		out = screen(out, core);
+		return out;
+	};
+
+	let stars = [];
+
+	for (let z = 0; z < depth; ++z) {
+		for (let y = 0; y < height; ++y) {
+			for (let x = 0; x < width; ++x) {
+				//let star = noise.starScape3D(seed, x, y, z, 1);
+				let star = noise.threshold(noise.noise(seed, x, y, z), 0.9);
+				if (star <= 0) continue;
+
+				let mask = galacticMask(x, y, config.arms, config.swirliness, config.coreWidth, config.coreHeight);
+				if (mask <= 0) continue;
+
+				let rand = (noise.noise(seed + 1, x, y, z) + 1) * 0.5;
+				if (rand > mask) continue;
+
+				let _x = x - (width  >> 1);
+				let _y = y - (height >> 1);
+				let _z = z - (depth  >> 1);
+
+				let __x  = _x / (depth >> 1);
+				let __y  = _y / (depth >> 1);
+				let __z  = _z / (depth >> 1);
+
+				let fade = Math.abs(__z) * Math.sqrt(__x * __x + __y * __y + __z * __z);
+				let bell = Math.abs(noise.normal(seed + 2, x, y, z));
+				if (bell - fade < 0) continue;
+
+				stars.push({
+					x: _x,
+					y: _y,
+					z: _z,
+					color: noise.normal(seed + 3, x, y, z)
+				});
+			}
+		}
+	}
+
+	console.log(stars.length);
+
+	/*
+			for (let y = 0; y < height; ++y) {
+				for (let x = 0; x < width; ++x) {
+					let _x = x - (width  >> 1);
+					let _y = y - (height >> 1);
+					let depthFade = Math.abs(noise.normal(seed + 1, x, y));
+	//let out = depthFade > Math.abs(2 * _x / width) ? 1 : 0;
+					let color  = 'hsl(0, 0%, ' + Math.floor(out * 100) + '%)';
+					setPixel(x, y, color);
+				}
+			}
+	 */
+
+	var particles = stars.length;
+
+	var geometry  = new THREE.BufferGeometry();
+	var positions = new Float32Array( particles * 3 );
+	var colors    = new Float32Array( particles * 3 );
+	var color     = new THREE.Color();
+	var blue      = new THREE.Color('#9BB0FF');
+	var orangered = new THREE.Color('#FFBD6F');
+	for (let i = 0; i < particles; ++i) {
+		let j = i * 3;
+		// positions
+		positions[ j ]     = stars[i].x;
+		positions[ j + 1 ] = stars[i].y;
+		positions[ j + 2 ] = stars[i].z;
+		// colors
+		color.setRGB(1, 1, 1);
+		if (stars[i].color < 0) {
+			color.lerp(blue, -stars[i].color);
+		} else {
+			color.lerp(orangered, stars[i].color);
+		}
+		colors[j]     = color.r;
+		colors[j + 1] = color.g;
+		colors[j + 2] = color.b;
+	}
+	geometry.addAttribute('position', new THREE.BufferAttribute(positions, 3));
+	geometry.addAttribute('color', new THREE.BufferAttribute(colors, 3));
+	geometry.computeBoundingSphere();
+
+	points.geometry = geometry;
+};
+
+let config = {
+	arms: 5,
+	swirliness: 0.5,
+	size: 512,
+	coreWidth:  0.4,
+	coreHeight: 0.3,
+	coreDepth:  0.25,
+	generate: generate
+};
+
+document.addEventListener("DOMContentLoaded", (event) => {
+	var gui = new dat.GUI();
+	gui.add(config, 'arms').min(1).step(1);
+	gui.add(config, 'swirliness').min(0);
+	gui.add(config, 'size').min(0).step(1);
+	gui.add(config, 'coreWidth',  0, 1);
+	gui.add(config, 'coreHeight', 0, 1);
+	gui.add(config, 'coreDepth',  0, 1);
+	gui.add(config, 'generate');
+
+	let container = document.getElementById('container');
+
+	let camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+	camera.position.y = 500;
+	camera.position.z = 500;
+	let scene = new THREE.Scene();
+	//scene.fog = new THREE.Fog(0x222244, 0, 1500);
+
+	var geometry = new THREE.BufferGeometry();
+	let material = new THREE.PointsMaterial({ size: 2, vertexColors: THREE.VertexColors });
+	points = new THREE.Points(geometry, material);
+	//points.rotation.x = -0.25 * Math.PI;
+	points.rotation.x = -0.5 * Math.PI;
+	scene.add(points);
+
+	let renderer = new THREE.WebGLRenderer({ antialias: false });
+	//renderer.setClearColor(scene.fog.color);
+	renderer.setPixelRatio(window.devicePixelRatio);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	container.appendChild(renderer.domElement);
+
+	window.addEventListener('resize', () => {
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}, false);
+
+	let controls = new THREE.OrbitControls(camera, renderer.domElement);
+	controls.addEventListener('change', render); // remove when using animation loop
+	// enable animation loop when using damping or autorotation
+	//controls.enableDamping = true;
+	//controls.dampingFactor = 0.25;
+	controls.enableZoom = true;
+	camera.rotation.x = -0.25 * Math.PI;
+
+	function animate() {
+		requestAnimationFrame(animate);
+		//controls.update();
+		render();
+	}
+
+	function render() {
+		let time = Date.now() * 0.001;
+		points.rotation.z = -0.1 * time;
+		renderer.render(scene, camera);
+	}
+
+	generate();
+
+	animate();
+});
+	</script>
+</body>
+</html>
